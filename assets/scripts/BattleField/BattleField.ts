@@ -12,6 +12,23 @@ export class BattleField extends Component {
     @property(Node)
     public EnemyFishes: Node[] = [];//敌方鱼的站位节点数组
 
+    private _LeftFishes: mediator[] = [];
+    public get LeftFishes(): mediator[] {
+        return this._LeftFishes;
+    }
+    public set LeftFishes(value: mediator[]) {
+        this._LeftFishes = value;
+    }
+
+    private _RightFished: mediator[] = [];
+    public get RightFished(): mediator[] {
+        return this._RightFished;
+    }
+    public set RightFished(value: mediator[]) {
+        this._RightFished = value;
+    }
+
+
     private _CurrentStage: number = 1;
     /**
      * 当前关卡
@@ -24,24 +41,27 @@ export class BattleField extends Component {
     }
 
     start() {
+
+        this.fetch_MyFishes();
+        this.initEnemyFishes();
+        this.battleLoop([...this.LeftFishes, ...this.RightFished])
+    }
+
+    /**Http   从服务器获取我方鱼的数据  */
+    private fetch_MyFishes() {
         const crabUrl = GameTsCfg.Actor[1].prefab;//从配置表读取螃蟹预制体在 resources 下的路径
         for (let i = 0; i < this.MyFishes.length; i++) {//遍历所有我方站位；i 从 0 到 length-1，i 达到 length 时循环结束
             resources.load(crabUrl, Prefab, (erro, prefab) => {//从 resources 资源包异步加载预制体，加载完成后执行回调
                 if (prefab) {//如果加载成功，prefab 不为空
                     let crabNode = instantiate(prefab);//根据预制体创建一个新的螃蟹节点
                     this.node.addChild(crabNode);//把新螃蟹挂到 BattleField 节点下，成为它的子节点
+                    const mediators = crabNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
+                    this.LeftFishes.push(mediators);
                     crabNode.setPosition(this.MyFishes[i].position);//把新螃蟹放到第 i 个站位节点的位置（局部坐标）
                 }
             });
 
         }
-        this.fetch_MyFishes();
-        this.initEnemyFishes();
-    }
-
-    /**Http   从服务器获取我方鱼的数据  */
-    private fetch_MyFishes() {
-
     }
 
     /**根据配置表初始化敌方鱼的数据 */
@@ -59,6 +79,7 @@ export class BattleField extends Component {
                         this.node.addChild(fishNode);//把这个新敌人挂到 BattleField 节点下面
                         fishNode.setPosition(this.EnemyFishes[i].position);//把新敌人放到第 i 个敌方站位节点的位置
                         const mediators = fishNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
+                        this.RightFished.push(mediators);
                         mediators.isReverse = -1;//让这个敌人转身，面朝左边。
                     }
                 })
@@ -69,6 +90,50 @@ export class BattleField extends Component {
 
     update(deltaTime: number) {
 
+    }
+
+    /**只把还活着的人留下 */
+    private getAliveActors(targets: mediator[]) {//传入一组角色，返回还活着的角色
+
+        return targets.filter(target => target.isLive == true);//把数组里的元素一个个检查，只留下活的，组成一个新数组。
+    }
+
+    /**按速度排队，速度最快的先出手 */
+    private getNextActionActor(targets: mediator[]) {
+        let aliveActor = this.getAliveActors(targets);//取出还存活的对象
+        const sortedActors = aliveActor.sort((a, b) => {//按照速度排序，速度大的排在前面。
+            return b.actor.speed - a.actor.speed;
+        })
+        if (sortedActors) {
+            return sortedActors[0];//返回排序后的第一个角色，也就是速度最快的那个。
+        }
+    }
+
+    /**判断左右阵营 */
+    private isActorFromLeft(target: mediator): boolean {
+        this.LeftFishes.forEach(element => {//遍历我方角色数组
+            if (element.actor.uuid == target.actor.uuid) {
+                return true;//如果当前这个角色的 uuid 和目标的 uuid 一样，就返回 true
+            } 
+        });
+         return false;//否则就是flase
+    }
+
+    /**判断能不能放技能 */
+    private isCanSkill(): boolean {
+        //todo
+        return true
+    }
+
+    /**战斗循环 */
+    private battleLoop(targets: mediator[]) {
+        let attacker = this.getNextActionActor(targets);//选出下一个出手的人。
+        const isLeft = this.isActorFromLeft(attacker);//判断这个人是左边还是右边。
+        if (this.isCanSkill()) {//判断能不能放技能
+
+        } else {
+            const attackType = attacker.actor.cfg.attackType;//如果不能放技能，就读取普通攻击类型。
+        }
     }
 }
 

@@ -1,5 +1,11 @@
 import GameTsCfg from "../data/client/GameTsCfg";
 
+export const attackType = {
+    MeleeAttack:1,//近战
+    Shooting:2,//远程
+    Healing:3,//治疗
+}
+
 export class ActorIDFactory {
     static _id: number = 0;
     static createuuid(): number {
@@ -7,7 +13,7 @@ export class ActorIDFactory {
     }
 
 }
-
+ 
 export class Actor {
     constructor(id: number) {
         this.uuid = ActorIDFactory.createuuid();
@@ -34,10 +40,10 @@ export class Actor {
 
     private _uuid;
     /**uuid */
-    private get uuid() {
+    public get uuid() {
         return this._uuid
     }
-    private set uuid(value) {
+    public set uuid(value) {
         this._uuid = value;
     }
 
@@ -70,10 +76,10 @@ export class Actor {
 
     private _speed;
     /**速度 */
-    private get speed() {
+    public get speed() {
         return this._speed;
     }
-    private set speed(value) {
+    public set speed(value) {
         this._speed = value;
     }
 
