@@ -9,7 +9,8 @@ export default {
       "defence": 10,
       "hp": 100,
       "speed": 2,
-      "rage": 100
+      "rage": 100,
+      "taunt": 20
     },
     "2": {
       "id": 2,
@@ -20,7 +21,8 @@ export default {
       "defence": 5,
       "hp": 120,
       "speed": 3,
-      "rage": 100
+      "rage": 100,
+      "taunt": 30
     }
   },
   "Stage": {

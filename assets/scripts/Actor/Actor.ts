@@ -1,6 +1,6 @@
 import GameTsCfg from "../data/client/GameTsCfg";
 
-export const attackType = {
+export const AttackType = {
     MeleeAttack:1,//近战
     Shooting:2,//远程
     Healing:3,//治疗
@@ -26,7 +26,7 @@ export class Actor {
             this.hp = this.cfg?.hp;
             this.speed = this.cfg?.speed;
             this.rage = this.cfg?.rage;
-
+            this.taunt = this.cfg?.taunt;
         }
     }
     private _cfg;
@@ -109,5 +109,17 @@ export class Actor {
     private set level(value) {
         this._level = value;
     }
+
+    private _taunt: number = 0;
+    /**
+     * 嘲讽
+     */
+    public get taunt(): number {
+        return this._taunt;
+    }
+    public set taunt(value: number) {
+        this._taunt = value;
+    }
+    
 }
 

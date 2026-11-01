@@ -1,7 +1,10 @@
-import { _decorator, Component, instantiate, Node, Prefab, resources } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, resources, Vec3 } from 'cc';
 import GameTsCfg from '../data/client/GameTsCfg';
 import { Utils } from '../Utils';
 import { mediator } from '../Mediator/mediator';
+import { AttackType } from '../Actor/Actor';
+import { AttackCommand, CommandQueue, MoveCommand } from '../Command/Command';
+import { Constants } from '../Constants';
 const { ccclass, property } = _decorator;
 
 @ccclass('BattleField')
@@ -20,12 +23,12 @@ export class BattleField extends Component {
         this._LeftFishes = value;
     }
 
-    private _RightFished: mediator[] = [];
-    public get RightFished(): mediator[] {
-        return this._RightFished;
+    private _RightFishes: mediator[] = [];
+    public get RightFishes(): mediator[] {
+        return this._RightFishes;
     }
-    public set RightFished(value: mediator[]) {
-        this._RightFished = value;
+    public set RightFishes(value: mediator[]) {
+        this._RightFishes = value;
     }
 
 
@@ -44,7 +47,7 @@ export class BattleField extends Component {
 
         this.fetch_MyFishes();
         this.initEnemyFishes();
-        this.battleLoop([...this.LeftFishes, ...this.RightFished])
+        this.battleLoop([...this.LeftFishes, ...this.RightFishes])
     }
 
     /**Http   从服务器获取我方鱼的数据  */
@@ -79,7 +82,7 @@ export class BattleField extends Component {
                         this.node.addChild(fishNode);//把这个新敌人挂到 BattleField 节点下面
                         fishNode.setPosition(this.EnemyFishes[i].position);//把新敌人放到第 i 个敌方站位节点的位置
                         const mediators = fishNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
-                        this.RightFished.push(mediators);
+                        this.RightFishes.push(mediators);
                         mediators.isReverse = -1;//让这个敌人转身，面朝左边。
                     }
                 })
@@ -109,14 +112,21 @@ export class BattleField extends Component {
         }
     }
 
+    /**从存活的角色中，选出嘲讽值最高的角色作为防御方 */
+    private getNextDefender(targets: mediator[]) {
+        let aliveActor = this.getAliveActors(targets);//取出还存活的对象
+        const sortedActors = aliveActor.sort((a, b) => {//按照嘲讽值排序，嘲讽值大的排在前面优先被攻击。
+            return b.actor.taunt - a.actor.taunt;
+        })
+        if (sortedActors) {
+            return sortedActors[0];//返回排序后的第一个角色，也就是嘲讽值最大的那个。
+        }
+    }
+
     /**判断左右阵营 */
     private isActorFromLeft(target: mediator): boolean {
-        this.LeftFishes.forEach(element => {//遍历我方角色数组
-            if (element.actor.uuid == target.actor.uuid) {
-                return true;//如果当前这个角色的 uuid 和目标的 uuid 一样，就返回 true
-            } 
-        });
-         return false;//否则就是flase
+        return this.LeftFishes.some(element =>element.actor.uuid === target.actor.uuid);
+        //遍历数组，只要有一个元素满足条件，就返回 true；如果全部都不满足，就返回 false。
     }
 
     /**判断能不能放技能 */
@@ -127,12 +137,52 @@ export class BattleField extends Component {
 
     /**战斗循环 */
     private battleLoop(targets: mediator[]) {
+        //寻找攻击方和防御方
         let attacker = this.getNextActionActor(targets);//选出下一个出手的人。
-        const isLeft = this.isActorFromLeft(attacker);//判断这个人是左边还是右边。
+        if(!attacker){//如果没有可选的攻击方就不执行下面逻辑
+            return;
+        }
+        let defender:mediator;//先声明一个变量，用来保存防御方
+        const isAttackerLeft = this.isActorFromLeft(attacker);//判断这个人是左边还是右边。
+    
+        if (isAttackerLeft) {
+            defender = this.getNextDefender(this.RightFishes);//如果攻击方在左边，就从右边阵营选防御方；
+        } else {
+            defender = this.getNextDefender(this.LeftFishes);//如果攻击方在右边，就从左边阵营选防御方；
+        }
+
+        if(!defender){//如果没有可选的防御方就不执行下面逻辑
+            return;
+        }
+
+        let commandQueue = new CommandQueue();//创建一个命令队列，用来按顺序执行移动、攻击、移动回来等动作。
+
         if (this.isCanSkill()) {//判断能不能放技能
 
         } else {
-            const attackType = attacker.actor.cfg.attackType;//如果不能放技能，就读取普通攻击类型。
+            let attackType = attacker.actor.cfg.attackType;//如果不能放技能，就读取普通攻击类型。
+            if (attackType == AttackType.Healing) {//如果是治疗
+
+
+            } else if (attackType == AttackType.MeleeAttack) {//如果是近战攻击，就走近敌人再攻击
+                const movePos = new Vec3(defender.node.worldPosition.x + defender.crabWidth() * defender.isReverse, defender.node.worldPosition.y, defender.node.worldPosition.z);//计算近战攻击者要走到防御方哪一侧。
+                /**
+                 * defender.node.worldPosition.x：防御方的 x 坐标
+                    defender.crabWidth()：防御方的实际宽度
+                    defender.isReverse：防御方的朝向 1：朝右， - 1：朝左
+                 */
+                const move = new MoveCommand(attacker, movePos, Constants.MoveDuration);//创建"移动命令"：让攻击方用 MoveDuration 秒走到 movePos。
+                const atk = new AttackCommand(attacker, defender);//创建"攻击命令"：让攻击方攻击防御方。
+                const moveBack = new MoveCommand(attacker, attacker.node.worldPosition.clone(), Constants.MoveDuration);//创建"返回命令"：让攻击方回到原来的位置。
+                commandQueue.addcommand(move);//走过去
+                commandQueue.addcommand(atk);//攻击
+                commandQueue.addcommand(moveBack);//走回来
+
+            } else if (attackType == AttackType.Shooting) {//如果是远程
+
+
+            }
+            commandQueue.execute();//开始执行命令
         }
     }
 }
