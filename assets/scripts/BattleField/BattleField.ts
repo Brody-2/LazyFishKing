@@ -15,6 +15,10 @@ export class BattleField extends Component {
     @property(Node)
     public EnemyFishes: Node[] = [];//敌方鱼的站位节点数组
 
+    private _allPrefabCount:number = 1;//本局需要加载的预制体总数，用于判断是否全部加载完成
+    private _prefabLodingCount:number = 0;//当前读取到的数量
+    private _isBattleBegin:boolean = false;//战斗是否已经开始，用于防止 update 中重复启动战斗
+
     private _LeftFishes: mediator[] = [];
     public get LeftFishes(): mediator[] {
         return this._LeftFishes;
@@ -47,7 +51,6 @@ export class BattleField extends Component {
 
         this.fetch_MyFishes();
         this.initEnemyFishes();
-        this.battleLoop([...this.LeftFishes, ...this.RightFishes])
     }
 
     /**Http   从服务器获取我方鱼的数据  */
@@ -61,10 +64,11 @@ export class BattleField extends Component {
                     const mediators = crabNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
                     this.LeftFishes.push(mediators);
                     crabNode.setPosition(this.MyFishes[i].position);//把新螃蟹放到第 i 个站位节点的位置（局部坐标）
+                    this._prefabLodingCount += 1;//每成功加载并实例化一个螃蟹，已加载数量就加1
                 }
             });
-
         }
+        this._allPrefabCount = this.MyFishes.length;//我方一共有 5 个螃蟹需要加载。
     }
 
     /**根据配置表初始化敌方鱼的数据 */
@@ -84,14 +88,12 @@ export class BattleField extends Component {
                         const mediators = fishNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
                         this.RightFishes.push(mediators);
                         mediators.isReverse = -1;//让这个敌人转身，面朝左边。
+                        this._prefabLodingCount += 1;//已经加载完成的数量加1
                     }
                 })
             }
+            this._allPrefabCount += fisheIds.length;//把这一关敌人数量的总数，加到“总加载数量”里。
         }
-
-    }
-
-    update(deltaTime: number) {
 
     }
 
@@ -132,7 +134,7 @@ export class BattleField extends Component {
     /**判断能不能放技能 */
     private isCanSkill(): boolean {
         //todo
-        return true
+        return false;
     }
 
     /**战斗循环 */
@@ -183,6 +185,14 @@ export class BattleField extends Component {
 
             }
             commandQueue.execute();//开始执行命令
+        }
+    }
+
+    update(deltaTime: number) {
+            if(this._prefabLodingCount == this._allPrefabCount && (this._isBattleBegin == false)){//已经加载完成的数量，是不是等于总数量？
+            //如果7个角色没加载完，条件不成立，继续等，全部加载完成，条件成立，而且战斗还没开始，就启动战斗；
+            this._isBattleBegin = true;//把战斗标记为"已经开始"
+            this.battleLoop([...this.LeftFishes, ...this.RightFishes]);//把左边和右边的角色合并成一个数组，传给战斗逻辑。
         }
     }
 }
