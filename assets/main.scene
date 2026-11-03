@@ -1212,7 +1212,7 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "MyFishes": [
+    "LeftFishAreas": [
       {
         "__id__": 12
       },
@@ -1229,7 +1229,7 @@
         "__id__": 20
       }
     ],
-    "EnemyFishes": [
+    "RightFishAreas": [
       {
         "__id__": 22
       },

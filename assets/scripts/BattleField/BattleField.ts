@@ -10,14 +10,14 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleField')
 export class BattleField extends Component {
     @property(Node)
-    public MyFishes: Node[] = [];//我方螃蟹的站位节点数组
+    public LeftFishAreas: Node[] = [];//我方螃蟹的站位节点数组
 
     @property(Node)
-    public EnemyFishes: Node[] = [];//敌方鱼的站位节点数组
+    public RightFishAreas: Node[] = [];//敌方鱼的站位节点数组
 
-    private _allPrefabCount:number = 1;//本局需要加载的预制体总数，用于判断是否全部加载完成
-    private _prefabLodingCount:number = 0;//当前读取到的数量
-    private _isBattleBegin:boolean = false;//战斗是否已经开始，用于防止 update 中重复启动战斗
+    private _allPrefabCount: number = 1;//本局需要加载的预制体总数，用于判断是否全部加载完成
+    private _prefabLodingCount: number = 0;//当前读取到的数量
+    private _isBattleBegin: boolean = false;//战斗是否已经开始，用于防止 update 中重复启动战斗
 
     private _LeftFishes: mediator[] = [];
     public get LeftFishes(): mediator[] {
@@ -56,23 +56,24 @@ export class BattleField extends Component {
     /**Http   从服务器获取我方鱼的数据  */
     private fetch_MyFishes() {
         const crabUrl = GameTsCfg.Actor[1].prefab;//从配置表读取螃蟹预制体在 resources 下的路径
-        for (let i = 0; i < this.MyFishes.length; i++) {//遍历所有我方站位；i 从 0 到 length-1，i 达到 length 时循环结束
+        for (let i = 0; i < this.LeftFishAreas.length; i++) {//遍历所有我方站位；i 从 0 到 length-1，i 达到 length 时循环结束
             resources.load(crabUrl, Prefab, (erro, prefab) => {//从 resources 资源包异步加载预制体，加载完成后执行回调
                 if (prefab) {//如果加载成功，prefab 不为空
                     let crabNode = instantiate(prefab);//根据预制体创建一个新的螃蟹节点
                     this.node.addChild(crabNode);//把新螃蟹挂到 BattleField 节点下，成为它的子节点
                     const mediators = crabNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
                     this.LeftFishes.push(mediators);
-                    crabNode.setPosition(this.MyFishes[i].position);//把新螃蟹放到第 i 个站位节点的位置（局部坐标）
+                    crabNode.setPosition(this.LeftFishAreas[i].position);//把新螃蟹放到第 i 个站位节点的位置（局部坐标）
                     this._prefabLodingCount += 1;//每成功加载并实例化一个螃蟹，已加载数量就加1
                 }
             });
         }
-        this._allPrefabCount = this.MyFishes.length;//我方一共有 5 个螃蟹需要加载。
+        this._allPrefabCount = this.LeftFishAreas.length;//我方一共有 5 个螃蟹需要加载。
     }
 
     /**根据配置表初始化敌方鱼的数据 */
     private initEnemyFishes() {
+        this.RightFishes = [];//初始化数组
         const Stages = GameTsCfg.Stage;//读取关卡配置表
         if (Stages[this.currentStage]) {//如果当前关卡在配置表里存在，就进入下面的代码
             const Stage = Stages[this.currentStage];//把当前这一关的具体配置取出来，存到 Stage 里。
@@ -84,7 +85,7 @@ export class BattleField extends Component {
                     if (prefab) {//如果加载成功了
                         let fishNode = instantiate(prefab);//根据预制体，创建一个新的敌人节点。
                         this.node.addChild(fishNode);//把这个新敌人挂到 BattleField 节点下面
-                        fishNode.setPosition(this.EnemyFishes[i].position);//把新敌人放到第 i 个敌方站位节点的位置
+                        fishNode.setPosition(this.RightFishAreas[i].position);//把新敌人放到第 i 个敌方站位节点的位置
                         const mediators = fishNode.getComponent(mediator);//从新敌人节点上，找到它的 mediator 组件
                         this.RightFishes.push(mediators);
                         mediators.isReverse = -1;//让这个敌人转身，面朝左边。
@@ -101,6 +102,11 @@ export class BattleField extends Component {
     private getAliveActors(targets: mediator[]) {//传入一组角色，返回还活着的角色
 
         return targets.filter(target => target.isLive == true);//把数组里的元素一个个检查，只留下活的，组成一个新数组。
+    }
+
+    /**移除死亡角色，返回活着的角色 */
+    private removeDeadActors(targets: mediator[]) {
+        return targets.filter(targets => targets.isLive == true);//从数组里筛出还活着的角色，返回一个新数组。
     }
 
     /**按速度排队，速度最快的先出手 */
@@ -127,7 +133,7 @@ export class BattleField extends Component {
 
     /**判断左右阵营 */
     private isActorFromLeft(target: mediator): boolean {
-        return this.LeftFishes.some(element =>element.actor.uuid === target.actor.uuid);
+        return this.LeftFishes.some(element => element.actor.uuid === target.actor.uuid);
         //遍历数组，只要有一个元素满足条件，就返回 true；如果全部都不满足，就返回 false。
     }
 
@@ -141,23 +147,25 @@ export class BattleField extends Component {
     private battleLoop(targets: mediator[]) {
         //寻找攻击方和防御方
         let attacker = this.getNextActionActor(targets);//选出下一个出手的人。
-        if(!attacker){//如果没有可选的攻击方就不执行下面逻辑
+        if (!attacker) {//如果没有可选的攻击方就不执行下面逻辑
             return;
         }
-        let defender:mediator;//先声明一个变量，用来保存防御方
+        let defender: mediator;//先声明一个变量，用来保存防御方
         const isAttackerLeft = this.isActorFromLeft(attacker);//判断这个人是左边还是右边。
-    
+
         if (isAttackerLeft) {
             defender = this.getNextDefender(this.RightFishes);//如果攻击方在左边，就从右边阵营选防御方；
         } else {
             defender = this.getNextDefender(this.LeftFishes);//如果攻击方在右边，就从左边阵营选防御方；
         }
 
-        if(!defender){//如果没有可选的防御方就不执行下面逻辑
+        if (!defender) {//如果没有可选的防御方就不执行下面逻辑
             return;
         }
 
         let commandQueue = new CommandQueue();//创建一个命令队列，用来按顺序执行移动、攻击、移动回来等动作。
+
+        let duration = 0;//定义一个变量，用来累计这一回合所有动作一共需要多少秒。
 
         if (this.isCanSkill()) {//判断能不能放技能
 
@@ -177,19 +185,67 @@ export class BattleField extends Component {
                 const atk = new AttackCommand(attacker, defender);//创建"攻击命令"：让攻击方攻击防御方。
                 const moveBack = new MoveCommand(attacker, attacker.node.worldPosition.clone(), Constants.MoveDuration);//创建"返回命令"：让攻击方回到原来的位置。
                 commandQueue.addcommand(move);//走过去
+                duration += move.duration;//把“走过去”这个动作的时长加到总时长里。
                 commandQueue.addcommand(atk);//攻击
+                duration += atk.duration;//把“攻击”这个动作的时长加到总时长里。
                 commandQueue.addcommand(moveBack);//走回来
+                duration += moveBack.duration;//把“走回来”的时间也加进去总时长里面
 
             } else if (attackType == AttackType.Shooting) {//如果是远程
 
-
             }
-            commandQueue.execute();//开始执行命令
+        }
+        commandQueue.execute();//开始执行命令
+
+        this.scheduleOnce(() => {
+            if (this.CheckGameOver()) {//判断玩家是否存活
+                //如果玩家已经没有存活角色，就游戏结束。
+                //todo
+                //gane over
+            } else {
+                const rightAliveActors = this.getAliveActors(this.RightFishes);//取出敌方所有还活着的角色。
+                if (rightAliveActors && rightAliveActors.length == 0) {//如果没有存活角色
+
+                    if (this.hasNextStage()) {//判断有没有下一关
+                        this.currentStage += 1;//有下一关加1
+                        this.initEnemyFishes();//根据新关卡加载新的敌人（异步加载）
+                        this.removeDeadActors(this.LeftFishes);//移除死亡角色，返回活着的角色
+                        this.battleLoop([...this.LeftFishes, ...this.RightFishes]);//让剩下的我方角色和新敌人继续战斗
+                    } else {
+                        //todo game win;
+                        //没有下一关：游戏胜利
+                    }
+                }
+            };
+        }, duration);
+    }
+
+    /**检查游戏是否已经结束 */
+    private CheckGameOver(): boolean {
+        //true  = 我方已经全部死亡
+        //false = 我方还有存活角色
+        const leftAliveActors = this.getAliveActors(this.LeftFishes);//从我方角色数组里筛出还活着的角色
+        if (leftAliveActors && leftAliveActors.length == 0) {//如果数组存在，并且长度为 0，则全部死亡
+            return true//返回ture；
+        };
+        return false;//否则说明还有存活角色 返回flase
+
+    }
+
+    /**检查是否有下一关 */
+    private hasNextStage(): boolean {
+        //true  = 配置表里还有下一关
+        //false = 当前已经是最后一关
+        const gameStage = GameTsCfg.Stage;//读取配置表
+        if (!gameStage[this.currentStage + 1]) {//检查当前关卡 + 1 是否存在
+            return false;//当前已经是最后一关 返回false
+        } else {
+            return true;//配置表里还有下一关 返回ture
         }
     }
 
     update(deltaTime: number) {
-            if(this._prefabLodingCount == this._allPrefabCount && (this._isBattleBegin == false)){//已经加载完成的数量，是不是等于总数量？
+        if (this._prefabLodingCount == this._allPrefabCount && (this._isBattleBegin == false)) {//已经加载完成的数量，是不是等于总数量？
             //如果7个角色没加载完，条件不成立，继续等，全部加载完成，条件成立，而且战斗还没开始，就启动战斗；
             this._isBattleBegin = true;//把战斗标记为"已经开始"
             this.battleLoop([...this.LeftFishes, ...this.RightFishes]);//把左边和右边的角色合并成一个数组，传给战斗逻辑。
